@@ -1,0 +1,54 @@
+# Конфигурация конвейера данных АС «RTP»
+# Все изменяемые параметры вынесены в этот файл (требование конфигурируемости).
+
+pipeline:
+  name: ecommerce-realtime-pipeline
+  timezone: UTC
+
+# Параметры потоковой обработки
+streaming:
+  trigger_interval: "30 seconds"   # период микропакетов Spark Structured Streaming
+  watermark_delay: "10 minutes"    # допустимое опоздание событий (показатель назначения)
+  checkpoint_root: "/opt/spark-checkpoints"
+  kafka:
+    topic_events: "events-raw"
+    topic_logs: "logs-raw"
+    starting_offsets: "latest"
+
+# Временные окна аналитических витрин
+windows:
+  funnel_duration: "5 minutes"     # неперекрывающееся окно конверсии воронки
+  abandoned_cart_interval: "30 minutes"  # интервал детектирования брошенной корзины
+  product_rating:
+    window_duration: "15 minutes"  # горизонт скользящего окна рейтинга
+    slide_duration: "5 minutes"    # шаг скольжения
+  traffic:
+    window_duration: "5 minutes"   # окно статистики трафика
+    baseline_windows: 12           # глубина базовой линии z-оценки (12 × 5 мин = 1 час)
+    z_threshold: 3.0               # порог z-оценки для аномалии
+
+# Веса событий в рейтинге популярных товаров
+scoring:
+  product_view: 1
+  add_to_cart: 3
+  order_created: 5
+
+# Хранение в озере данных
+storage:
+  raw_prefix_events: "frontend_events"
+  raw_prefix_logs: "nginx_logs"
+  raw_prefix_api: "external_api"
+  staging_prefix: "events"         # staging-слой: parquet, партиции по дате
+  retention_days: 90               # глубина хранения сырых данных
+
+# Пакетные задачи (Airflow)
+batch:
+  daily_schedule: "0 3 * * *"      # ежесуточная агрегация в 03:00 UTC
+  api_page_size: 500               # размер страницы при инкрементальном чтении API
+  api_max_lag_minutes: 10          # сдвиг границы инкремента на допустимое опоздание
+  backup_retention: 7              # число хранимых резервных копий БД витрин
+
+# Контроль качества данных
+quality:
+  max_null_fraction: 0.01          # допустимая доля пропусков в обязательных полях
+  max_duplicate_fraction: 0.001    # допустимая доля дублей по event_id
